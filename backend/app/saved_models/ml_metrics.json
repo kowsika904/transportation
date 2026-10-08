@@ -1,0 +1,90 @@
+{
+  "model_name": "XGBoost Disruption Classifier",
+  "num_samples": 2000,
+  "num_train": 1400,
+  "num_val": 300,
+  "num_test": 300,
+  "accuracy": 0.9833333333333333,
+  "macro_precision": 0.9735892961023851,
+  "macro_recall": 0.9484848484848485,
+  "macro_f1": 0.9584132642956172,
+  "class_wise_metrics": {
+    "STANDARD_FLOW": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "support": 60
+    },
+    "SEVERE_CONGESTION": {
+      "precision": 0.9790575916230366,
+      "recall": 1.0,
+      "f1_score": 0.9894179894179894,
+      "support": 187
+    },
+    "ROAD_CLOSURE": {
+      "precision": 1.0,
+      "recall": 0.9090909090909091,
+      "f1_score": 0.9523809523809523,
+      "support": 33
+    },
+    "SEVERE_WEATHER": {
+      "precision": 1.0,
+      "recall": 0.8333333333333334,
+      "f1_score": 0.9090909090909091,
+      "support": 12
+    },
+    "VEHICLE_BREAKDOWN": {
+      "precision": 0.8888888888888888,
+      "recall": 1.0,
+      "f1_score": 0.9411764705882353,
+      "support": 8
+    }
+  },
+  "confusion_matrix": [
+    [
+      60,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      187,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      2,
+      30,
+      0,
+      1
+    ],
+    [
+      0,
+      2,
+      0,
+      10,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      8
+    ]
+  ],
+  "feature_importances": {
+    "severity_level": 0.19585679471492767,
+    "wind_speed_mph": 0.043714072555303574,
+    "precipitation_inches": 0.05804823711514473,
+    "visibility_miles": 0.026700012385845184,
+    "temperature_f": 0.03434799611568451,
+    "road_capacity_reduction_pct": 0.35405853390693665,
+    "speed_ratio": 0.13963128626346588,
+    "active_vehicle_incident": 0.14764302968978882
+  }
+}
