@@ -26,7 +26,7 @@ def test_db_connection_and_session():
 def test_seed_database_and_verify_entities():
     summary = seed_database()
     assert summary["depots_seeded"] == 2
-    assert summary["segments_seeded"] == 8
+    assert summary["segments_seeded"] == 10
     assert summary["customers_seeded"] == 6
     assert summary["vehicles_seeded"] == 4
     assert summary["routes_seeded"] == 3

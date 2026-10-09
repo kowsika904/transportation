@@ -3,12 +3,16 @@ from app.models.schemas import (
     DisruptionInput, DisruptionClassification, ImpactAnalysis,
     ExplainabilityReport, RecoveryPlan
 )
+from app.engines.llm_engine import LLMExplainabilityEngine
 
 class ExplainabilityEngine:
     """
     Synthesizes ML SHAP feature attributions, NetworkX graph dependency cascades,
-    and rule-based decision trade-offs into a coherent operator explanation report.
+    rule-based decision trade-offs, and LLM-generated explanations into a coherent report.
     """
+
+    def __init__(self):
+        self.llm_engine = LLMExplainabilityEngine()
 
     def generate_report(
         self,
@@ -55,15 +59,35 @@ class ExplainabilityEngine:
         plan_c = recovery_plans.get("PLAN_C")
 
         plan_comp = {
-            "PLAN_A": f"Cost-optimal reroute (${plan_a.total_cost_usd} cost, {plan_a.sla_violations_count} SLA risk). Best for tight budget.",
-            "PLAN_B": f"Speed-optimal fast recovery (${plan_b.total_cost_usd} cost, {plan_b.sla_violations_count} SLA risk). Best for 100% on-time guarantee.",
-            "PLAN_C": f"Reliability/SLA-protected plan (${plan_c.total_cost_usd} cost, {plan_c.rescheduled_deliveries_count} rescheduled). Best for medical/perishable protection."
+            "PLAN_A": f"Cost-optimal reroute (${plan_a.total_cost_usd if plan_a else 0} cost, {plan_a.sla_violations_count if plan_a else 0} SLA risk). Best for tight budget.",
+            "PLAN_B": f"Speed-optimal fast recovery (${plan_b.total_cost_usd if plan_b else 0} cost, {plan_b.sla_violations_count if plan_b else 0} SLA risk). Best for 100% on-time guarantee.",
+            "PLAN_C": f"Reliability/SLA-protected plan (${plan_c.total_cost_usd if plan_c else 0} cost, {plan_c.rescheduled_deliveries_count if plan_c else 0} rescheduled). Best for medical/perishable protection."
         }
+
+        # 5. LLM Natural Language Synthesizer
+        disr_dict = disruption.model_dump()
+        class_dict = classification.model_dump()
+        impact_dict = impact.model_dump()
+        plans_dict = {k: v.model_dump() for k, v in recovery_plans.items()}
+
+        llm_summary = self.llm_engine.generate_incident_summary(disr_dict, class_dict)
+        llm_plan_comp = self.llm_engine.generate_plan_comparison_explanation(disr_dict, impact_dict, plans_dict)
+        llm_notification = self.llm_engine.generate_team_notification(disr_dict, impact_dict)
+        llm_provider_info = (
+            "External API (Configured)"
+            if self.llm_engine.api_key
+            else "Deterministic LLM Rule Engine (LLM_API_KEY not set)"
+        )
 
         return ExplainabilityReport(
             ml_prediction_reasoning=ml_reasons,
             shap_top_drivers=shap_drivers,
             network_dependency_cascades=network_cascades,
             impact_summary_reasons=impact_reasons,
-            plan_comparisons=plan_comp
+            plan_comparisons=plan_comp,
+            llm_executive_summary=llm_summary,
+            llm_plan_comparison=llm_plan_comp,
+            llm_team_notification=llm_notification,
+            llm_provider_info=llm_provider_info
         )
+

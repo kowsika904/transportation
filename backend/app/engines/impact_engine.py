@@ -56,12 +56,14 @@ class ImpactEngine:
             r_id = r["route_id"]
             v_id = r["vehicle_id"]
             
-            # Route is affected if it's in graph_trace or traverses affected node/segment
+            # Route is affected if it's in graph_trace or traverses an affected segment
             is_affected = (r_id in graph_trace["affected_route_ids"]) or (v_id in graph_trace["affected_vehicle_ids"])
             
-            # If default scenario affects Manhattan Bridge or Queens, tag associated routes
-            if disruption.location_node_id in r["assigned_segment_ids"] or is_affected or len(graph_trace["affected_route_ids"]) == 0:
-                is_affected = True
+            # Check if any assigned segment is in the matched segments
+            for seg in r["assigned_segment_ids"]:
+                if seg in graph_trace.get("matched_segment_ids", []) or seg == graph_trace["disruption_source_id"]:
+                    is_affected = True
+                    break
 
             if is_affected:
                 route_delay = base_delay_mins * (1.2 if v_id in breakdown_v_ids else 1.0)
@@ -73,7 +75,7 @@ class ImpactEngine:
                     AffectedRoute(
                         route_id=r_id,
                         vehicle_id=v_id,
-                        blocked_segment_id=disruption.location_node_id,
+                        blocked_segment_id=graph_trace["disruption_source_id"],
                         total_stops=len(r["stops"]),
                         impacted_stops_count=len([s for s in r["stops"] if s["type"] == "DELIVERY"]),
                         original_duration_minutes=orig_dur,

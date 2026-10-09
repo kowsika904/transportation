@@ -35,7 +35,19 @@ def create_db_engine():
     print(f"Using SQLite database: {sqlite_url}")
     return eng
 
+from sqlalchemy import text
+
+def ensure_schema_migrations(eng):
+    try:
+        with eng.connect() as conn:
+            conn.execute(text("ALTER TABLE disruptions ADD COLUMN IF NOT EXISTS reported_by VARCHAR(100);"))
+            conn.execute(text("ALTER TABLE disruptions ADD COLUMN IF NOT EXISTS status VARCHAR(30) DEFAULT 'REPORTED';"))
+            conn.commit()
+    except Exception as e:
+        print(f"Migration note: {e}")
+
 engine = create_db_engine()
+ensure_schema_migrations(engine)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -45,3 +57,4 @@ def get_db():
         yield db
     finally:
         db.close()
+

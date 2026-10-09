@@ -3,6 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router as api_router
 from app.api.auth import router as auth_router
 
+from app.db.config import engine, Base
+import app.db.models # Ensure models registered
+
+Base.metadata.create_all(bind=engine)
+
 app = FastAPI(
     title="Disruption-Aware Logistics Intelligence API",
     description="HACKNEXT'26 PS02 - End-to-end backend combining XGBoost classification, NetworkX dependency graphs, Impact & Priority engines, and Google OR-Tools recovery optimization.",

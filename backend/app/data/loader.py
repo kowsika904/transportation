@@ -51,6 +51,8 @@ class DataLoader:
             "NODE_QUEENS_DC": {"id": "NODE_QUEENS_DC", "name": "Queens Logistics Distribution Center", "lat": 40.7420, "lon": -73.9350, "zone": "Queens"},
             "NODE_FINANCIAL": {"id": "NODE_FINANCIAL", "name": "Wall Street Financial Hub", "lat": 40.7075, "lon": -74.0090, "zone": "Financial District"},
             "NODE_MANHATTAN_BRIDGE": {"id": "NODE_MANHATTAN_BRIDGE", "name": "Manhattan Bridge Corridor", "lat": 40.7090, "lon": -73.9900, "zone": "Chinatown/DUMBO"},
+            "NODE_BROOKLYN_BRIDGE": {"id": "NODE_BROOKLYN_BRIDGE", "name": "Brooklyn Bridge Corridor", "lat": 40.7061, "lon": -73.9969, "zone": "Lower Manhattan/DUMBO"},
+            "NODE_WILLIAMSBURG_BRIDGE": {"id": "NODE_WILLIAMSBURG_BRIDGE", "name": "Williamsburg Bridge Corridor", "lat": 40.7135, "lon": -73.9725, "zone": "Lower East Side/Williamsburg"},
             "NODE_FDR_DRIVE": {"id": "NODE_FDR_DRIVE", "name": "FDR Drive North Segment", "lat": 40.7300, "lon": -73.9740, "zone": "East Side"},
             "NODE_QUEENS_TUNNEL": {"id": "NODE_QUEENS_TUNNEL", "name": "Queens-Midtown Tunnel Plaza", "lat": 40.7445, "lon": -73.9680, "zone": "Murray Hill"},
             "NODE_BROOKLYN_NAVY": {"id": "NODE_BROOKLYN_NAVY", "name": "Brooklyn Navy Yard Depot", "lat": 40.7010, "lon": -73.9740, "zone": "Brooklyn"},
@@ -63,6 +65,8 @@ class DataLoader:
         # Connect graph nodes with distance, travel time, and free-flow speed
         return [
             {"id": "SEG_MANHATTAN_BRIDGE", "u": "NODE_FINANCIAL", "v": "NODE_BROOKLYN_NAVY", "distance_miles": 2.5, "free_flow_speed_mph": 40.0, "capacity_vehicles_per_hr": 2500},
+            {"id": "SEG_BROOKLYN_BRIDGE", "u": "NODE_FINANCIAL", "v": "NODE_BROOKLYN_NAVY", "distance_miles": 2.1, "free_flow_speed_mph": 35.0, "capacity_vehicles_per_hr": 2400},
+            {"id": "SEG_WILLIAMSBURG_BRIDGE", "u": "NODE_FINANCIAL", "v": "NODE_BROOKLYN_NAVY", "distance_miles": 3.2, "free_flow_speed_mph": 45.0, "capacity_vehicles_per_hr": 2600},
             {"id": "SEG_FDR_DRIVE_SOUTH", "u": "NODE_FINANCIAL", "v": "NODE_FDR_DRIVE", "distance_miles": 3.1, "free_flow_speed_mph": 45.0, "capacity_vehicles_per_hr": 3200},
             {"id": "SEG_QUEENS_TUNNEL", "u": "NODE_MIDTOWN_HUB", "v": "NODE_QUEENS_DC", "distance_miles": 4.2, "free_flow_speed_mph": 40.0, "capacity_vehicles_per_hr": 2800},
             {"id": "SEG_MIDTOWN_WEST", "u": "NODE_MIDTOWN_HUB", "v": "NODE_LINCOLN_TUNNEL", "distance_miles": 1.2, "free_flow_speed_mph": 25.0, "capacity_vehicles_per_hr": 1800},

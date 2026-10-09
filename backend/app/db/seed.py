@@ -7,7 +7,8 @@ from app.db.config import engine, SessionLocal, Base, USE_POSTGRES
 from app.db.models import (
     DepotModel, RoadSegmentModel, CustomerModel, VehicleModel,
     RouteModel, DeliveryModel, DisruptionModel, DependencyRelationshipModel,
-    RecoveryPlanModel, PlanSelectionModel, SRID_EPSG
+    RecoveryPlanModel, PlanSelectionModel, NotificationModel, AuditLogModel,
+    PlanRecommendationModel, DeliveryAcknowledgementModel, SRID_EPSG
 )
 from app.data.loader import DataLoader
 from app.data.scenarios import REPRODUCIBLE_SCENARIOS
@@ -22,17 +23,25 @@ def seed_database(db: Session = None) -> dict:
 
     try:
         # Clear existing table data cleanly
-        db.query(PlanSelectionModel).delete()
-        db.query(RecoveryPlanModel).delete()
-        db.query(DisruptionModel).delete()
-        db.query(DependencyRelationshipModel).delete()
-        db.query(DeliveryModel).delete()
-        db.query(RouteModel).delete()
-        db.query(VehicleModel).delete()
-        db.query(CustomerModel).delete()
-        db.query(RoadSegmentModel).delete()
-        db.query(DepotModel).delete()
-        db.commit()
+        try:
+            db.query(AuditLogModel).delete()
+            db.query(NotificationModel).delete()
+            db.query(PlanRecommendationModel).delete()
+            db.query(DeliveryAcknowledgementModel).delete()
+            db.query(PlanSelectionModel).delete()
+            db.query(RecoveryPlanModel).delete()
+            db.query(DisruptionModel).delete()
+            db.query(DependencyRelationshipModel).delete()
+            db.query(DeliveryModel).delete()
+            db.query(RouteModel).delete()
+            db.query(VehicleModel).delete()
+            db.query(CustomerModel).delete()
+            db.query(RoadSegmentModel).delete()
+            db.query(DepotModel).delete()
+            db.commit()
+        except Exception:
+            db.rollback()
+
 
         loader = DataLoader()
 

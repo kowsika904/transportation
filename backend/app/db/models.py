@@ -133,6 +133,8 @@ class DisruptionModel(Base):
     description = Column(Text, nullable=True)
     predicted_class = Column(String(50), nullable=True)
     confidence = Column(Float, nullable=True)
+    reported_by = Column(String(100), nullable=True) # Authenticated reporter identity
+    status = Column(String(30), default="REPORTED") # REPORTED, ANALYZED, RECOVERY_PROPOSED, RECOVERY_APPROVED, RESOLVED, DISMISSED
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     lat = Column(Float, nullable=True)
     lon = Column(Float, nullable=True)
@@ -184,3 +186,53 @@ class PlanSelectionModel(Base):
     operator_notes = Column(Text, nullable=True)
     custom_overrides_json = Column(Text, nullable=True)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class DeliveryAcknowledgementModel(Base):
+    __tablename__ = "delivery_acknowledgements"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    delivery_id = Column(String(50), nullable=False)
+    acknowledged_by = Column(String(100), nullable=False)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class PlanRecommendationModel(Base):
+    __tablename__ = "plan_recommendations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    disruption_id = Column(String(50), ForeignKey("disruptions.id"), nullable=False)
+    recommended_plan_id = Column(String(50), nullable=True)
+    policy_used = Column(String(50), nullable=False)
+    criteria_weights_json = Column(Text, nullable=False)
+    reasons_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class NotificationModel(Base):
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event_key = Column(String(100), unique=True, nullable=False)
+    event_type = Column(String(50), nullable=False)
+    title = Column(String(150), nullable=False)
+    message = Column(Text, nullable=False)
+    disruption_id = Column(String(50), nullable=True)
+    plan_id = Column(String(50), nullable=True)
+    recipient_role = Column(String(50), default="all")
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class AuditLogModel(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    actor_id = Column(String(100), nullable=False)
+    actor_role = Column(String(50), nullable=False)
+    action_type = Column(String(50), nullable=False)
+    entity_type = Column(String(50), nullable=False)
+    entity_id = Column(String(100), nullable=False)
+    state_before_json = Column(Text, nullable=True)
+    state_after_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+

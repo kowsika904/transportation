@@ -7,7 +7,8 @@ from app.db.config import SessionLocal, engine, Base
 from app.db.models import (
     DepotModel, RoadSegmentModel, CustomerModel, VehicleModel,
     RouteModel, DeliveryModel, DisruptionModel, DependencyRelationshipModel,
-    RecoveryPlanModel, PlanSelectionModel, SRID_EPSG
+    RecoveryPlanModel, PlanSelectionModel, DeliveryAcknowledgementModel,
+    PlanRecommendationModel, NotificationModel, AuditLogModel, SRID_EPSG
 )
 from app.models.schemas import DisruptionInput, RecoveryPlan
 
@@ -121,7 +122,7 @@ class DatabaseRepository:
             if self._db is None:
                 db.close()
 
-    def save_disruption(self, disruption: DisruptionInput, predicted_class: str = None, confidence: float = None) -> DisruptionModel:
+    def save_disruption(self, disruption: DisruptionInput, predicted_class: str = None, confidence: float = None, reported_by: str = None) -> DisruptionModel:
         db = self.get_db()
         try:
             existing = db.query(DisruptionModel).filter_by(id=disruption.disruption_id).first()
@@ -142,6 +143,8 @@ class DatabaseRepository:
                 if predicted_class:
                     existing.predicted_class = predicted_class
                     existing.confidence = confidence
+                if reported_by:
+                    existing.reported_by = reported_by
                 db.commit()
                 return existing
             else:
@@ -161,7 +164,8 @@ class DatabaseRepository:
                     active_vehicle_incident=disruption.active_vehicle_incident,
                     description=disruption.description,
                     predicted_class=predicted_class,
-                    confidence=confidence
+                    confidence=confidence,
+                    reported_by=reported_by
                 )
                 db.add(disr_obj)
                 db.commit()
@@ -248,3 +252,349 @@ class DatabaseRepository:
         finally:
             if self._db is None:
                 db.close()
+
+    def get_latest_disruptions(self, limit: int = 5) -> List[DisruptionModel]:
+        db = self.get_db()
+        try:
+            return db.query(DisruptionModel).order_by(DisruptionModel.created_at.desc()).limit(limit).all()
+        finally:
+            if self._db is None:
+                db.close()
+
+    def get_latest_active_transport_incident(self) -> Optional[DisruptionModel]:
+        """
+        Retrieves the newest valid, active disruption explicitly reported by a Transport Agent.
+        Filters out resolved, dismissed, test_runner, delivery team, and seeded demo incidents.
+        """
+        db = self.get_db()
+        try:
+            demo_ids = [
+                "DISR_NYC_BLIZZARD_01",
+                "DISR_BRIDGE_CLOSURE_02",
+                "DISR_TRUCK_BREAKDOWN_03",
+                "DISR_FDR_ACCIDENT_04",
+                "DISR_TUNNEL_FLOOD_05",
+                "DISR_AUDIT_PROP_01"
+            ]
+            query = db.query(DisruptionModel).filter(
+                DisruptionModel.status.in_(["ACTIVE", "REPORTED", "RECOVERY_APPROVED"]),
+                DisruptionModel.reported_by.isnot(None),
+                ~DisruptionModel.reported_by.in_(["test_runner", "test_user", "delivery", "logistics_operator", "system", "demo", "SEEDED_DEMO"]),
+                ~DisruptionModel.id.in_(demo_ids)
+            ).order_by(DisruptionModel.created_at.desc())
+            return query.first()
+        finally:
+            if self._db is None:
+                db.close()
+
+
+    def get_latest_plan_selection(self, disruption_id: str) -> Optional[PlanSelectionModel]:
+        db = self.get_db()
+        try:
+            return db.query(PlanSelectionModel).filter_by(disruption_id=disruption_id).order_by(PlanSelectionModel.updated_at.desc()).first()
+        finally:
+            if self._db is None:
+                db.close()
+
+    def record_delivery_acknowledgement(self, delivery_id: str, acknowledged_by: str, notes: str = None) -> Dict[str, Any]:
+        db = self.get_db()
+        try:
+            ack_obj = DeliveryAcknowledgementModel(
+                delivery_id=delivery_id,
+                acknowledged_by=acknowledged_by,
+                notes=notes
+            )
+            db.add(ack_obj)
+            db.commit()
+            db.refresh(ack_obj)
+            return {
+                "id": ack_obj.id,
+                "delivery_id": ack_obj.delivery_id,
+                "acknowledged_by": ack_obj.acknowledged_by,
+                "notes": ack_obj.notes,
+                "timestamp": ack_obj.created_at.isoformat() if ack_obj.created_at else datetime.now().isoformat()
+            }
+        finally:
+            if self._db is None:
+                db.close()
+
+    def get_delivery_acknowledgements(self) -> List[Dict[str, Any]]:
+        db = self.get_db()
+        try:
+            records = db.query(DeliveryAcknowledgementModel).order_by(DeliveryAcknowledgementModel.created_at.desc()).all()
+            return [
+                {
+                    "delivery_id": r.delivery_id,
+                    "acknowledged_by": r.acknowledged_by,
+                    "notes": r.notes,
+                    "timestamp": r.created_at.isoformat() if r.created_at else None
+                } for r in records
+            ]
+        finally:
+            if self._db is None:
+                db.close()
+
+    def record_plan_recommendation(
+        self,
+        disruption_id: str,
+        recommended_plan_id: str,
+        policy_used: str,
+        criteria_and_weights: Dict[str, Any],
+        reasons: List[str]
+    ) -> Dict[str, Any]:
+        db = self.get_db()
+        try:
+            rec_obj = PlanRecommendationModel(
+                disruption_id=disruption_id,
+                recommended_plan_id=recommended_plan_id,
+                policy_used=policy_used,
+                criteria_weights_json=json.dumps(criteria_and_weights),
+                reasons_json=json.dumps(reasons)
+            )
+            db.add(rec_obj)
+            db.commit()
+            db.refresh(rec_obj)
+            return {
+                "id": rec_obj.id,
+                "disruption_id": rec_obj.disruption_id,
+                "recommended_plan_id": rec_obj.recommended_plan_id,
+                "policy_used": rec_obj.policy_used,
+                "criteria_and_weights": criteria_and_weights,
+                "reasons": reasons,
+                "timestamp": rec_obj.created_at.isoformat() if rec_obj.created_at else datetime.now().isoformat()
+            }
+        finally:
+            if self._db is None:
+                db.close()
+
+    def get_latest_recommendation(self, disruption_id: str) -> Optional[Dict[str, Any]]:
+        db = self.get_db()
+        try:
+            rec = db.query(PlanRecommendationModel).filter_by(disruption_id=disruption_id).order_by(PlanRecommendationModel.created_at.desc()).first()
+            if not rec:
+                return None
+            return {
+                "id": rec.id,
+                "disruption_id": rec.disruption_id,
+                "recommended_plan_id": rec.recommended_plan_id,
+                "policy_used": rec.policy_used,
+                "criteria_and_weights": json.loads(rec.criteria_weights_json) if rec.criteria_weights_json else {},
+                "reasons": json.loads(rec.reasons_json) if rec.reasons_json else [],
+                "timestamp": rec.created_at.isoformat() if rec.created_at else None
+            }
+        finally:
+            if self._db is None:
+                db.close()
+
+    def update_disruption_status(
+        self, disruption_id: str, new_status: str, actor_id: str = "operator", actor_role: str = "logistics_operator"
+    ) -> Dict[str, Any]:
+        db = self.get_db()
+        try:
+            disr = db.query(DisruptionModel).filter_by(id=disruption_id).first()
+            if not disr:
+                raise ValueError(f"Disruption '{disruption_id}' not found.")
+
+            curr_status = disr.status or "REPORTED"
+            new_status_upper = new_status.upper()
+
+            valid_transitions = {
+                "REPORTED": ["ANALYZED", "RECOVERY_PROPOSED", "RECOVERY_APPROVED", "DISMISSED"],
+                "ANALYZED": ["RECOVERY_PROPOSED", "RECOVERY_APPROVED", "DISMISSED"],
+                "RECOVERY_PROPOSED": ["RECOVERY_APPROVED", "DISMISSED"],
+                "RECOVERY_APPROVED": ["RESOLVED", "DISMISSED"],
+                "RESOLVED": [],
+                "DISMISSED": []
+            }
+
+            allowed = valid_transitions.get(curr_status, [])
+            if new_status_upper != curr_status and new_status_upper not in allowed:
+                raise ValueError(f"Invalid status transition from '{curr_status}' to '{new_status_upper}'. Permitted next statuses: {allowed}")
+
+            disr.status = new_status_upper
+            db.commit()
+
+            self.record_audit_entry(
+                actor_id=actor_id,
+                actor_role=actor_role,
+                action_type="STATUS_CHANGED",
+                entity_type="DISRUPTION",
+                entity_id=disruption_id,
+                state_before={"status": curr_status},
+                state_after={"status": new_status_upper}
+            )
+
+            event_key = f"STATUS_CHANGE_{disruption_id}_{new_status_upper}"
+            self.create_notification(
+                event_key=event_key,
+                event_type="INCIDENT_STATUS_CHANGED",
+                title=f"Incident Status Updated: {new_status_upper}",
+                message=f"Disruption {disruption_id} status changed from {curr_status} to {new_status_upper}.",
+                disruption_id=disruption_id,
+                recipient_role="all"
+            )
+
+            return {
+                "disruption_id": disruption_id,
+                "previous_status": curr_status,
+                "current_status": new_status_upper,
+                "updated_by": actor_id
+            }
+        finally:
+            if self._db is None:
+                db.close()
+
+    def create_notification(
+        self,
+        event_key: str,
+        event_type: str,
+        title: str,
+        message: str,
+        disruption_id: str = None,
+        plan_id: str = None,
+        recipient_role: str = "all"
+    ) -> Dict[str, Any]:
+        db = self.get_db()
+        try:
+            existing = db.query(NotificationModel).filter_by(event_key=event_key).first()
+            if existing:
+                return {
+                    "id": existing.id,
+                    "event_key": existing.event_key,
+                    "event_type": existing.event_type,
+                    "title": existing.title,
+                    "message": existing.message,
+                    "disruption_id": existing.disruption_id,
+                    "plan_id": existing.plan_id,
+                    "recipient_role": existing.recipient_role,
+                    "is_read": existing.is_read,
+                    "created_at": existing.created_at.isoformat() if existing.created_at else datetime.now().isoformat()
+                }
+
+            notif = NotificationModel(
+                event_key=event_key,
+                event_type=event_type,
+                title=title,
+                message=message,
+                disruption_id=disruption_id,
+                plan_id=plan_id,
+                recipient_role=recipient_role,
+                is_read=False
+            )
+            db.add(notif)
+            db.commit()
+            db.refresh(notif)
+
+            return {
+                "id": notif.id,
+                "event_key": notif.event_key,
+                "event_type": notif.event_type,
+                "title": notif.title,
+                "message": notif.message,
+                "disruption_id": notif.disruption_id,
+                "plan_id": notif.plan_id,
+                "recipient_role": notif.recipient_role,
+                "is_read": notif.is_read,
+                "created_at": notif.created_at.isoformat() if notif.created_at else datetime.now().isoformat()
+            }
+        finally:
+            if self._db is None:
+                db.close()
+
+    def get_notifications_for_role(self, role: str = "all") -> List[Dict[str, Any]]:
+        db = self.get_db()
+        try:
+            query = db.query(NotificationModel).filter(
+                (NotificationModel.recipient_role == "all") | (NotificationModel.recipient_role == role)
+            ).order_by(NotificationModel.created_at.desc()).limit(50)
+            records = query.all()
+            return [
+                {
+                    "id": r.id,
+                    "event_key": r.event_key,
+                    "event_type": r.event_type,
+                    "title": r.title,
+                    "message": r.message,
+                    "disruption_id": r.disruption_id,
+                    "plan_id": r.plan_id,
+                    "recipient_role": r.recipient_role,
+                    "is_read": r.is_read,
+                    "created_at": r.created_at.isoformat() if r.created_at else None
+                } for r in records
+            ]
+        finally:
+            if self._db is None:
+                db.close()
+
+    def mark_notification_as_read(self, notification_id: int) -> bool:
+        db = self.get_db()
+        try:
+            notif = db.query(NotificationModel).filter_by(id=notification_id).first()
+            if notif:
+                notif.is_read = True
+                db.commit()
+                return True
+            return False
+        finally:
+            if self._db is None:
+                db.close()
+
+    def record_audit_entry(
+        self,
+        actor_id: str,
+        actor_role: str,
+        action_type: str,
+        entity_type: str,
+        entity_id: str,
+        state_before: Dict[str, Any] = None,
+        state_after: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
+        db = self.get_db()
+        try:
+            entry = AuditLogModel(
+                actor_id=actor_id,
+                actor_role=actor_role,
+                action_type=action_type,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                state_before_json=json.dumps(state_before) if state_before else None,
+                state_after_json=json.dumps(state_after) if state_after else None
+            )
+            db.add(entry)
+            db.commit()
+            db.refresh(entry)
+            return {
+                "id": entry.id,
+                "actor_id": entry.actor_id,
+                "actor_role": entry.actor_role,
+                "action_type": entry.action_type,
+                "entity_type": entry.entity_type,
+                "entity_id": entry.entity_id,
+                "timestamp": entry.created_at.isoformat() if entry.created_at else datetime.now().isoformat()
+            }
+        finally:
+            if self._db is None:
+                db.close()
+
+    def get_audit_logs(self, limit: int = 50) -> List[Dict[str, Any]]:
+        db = self.get_db()
+        try:
+            records = db.query(AuditLogModel).order_by(AuditLogModel.created_at.desc()).limit(limit).all()
+            return [
+                {
+                    "id": r.id,
+                    "actor_id": r.actor_id,
+                    "actor_role": r.actor_role,
+                    "action_type": r.action_type,
+                    "entity_type": r.entity_type,
+                    "entity_id": r.entity_id,
+                    "state_before": json.loads(r.state_before_json) if r.state_before_json else None,
+                    "state_after": json.loads(r.state_after_json) if r.state_after_json else None,
+                    "timestamp": r.created_at.isoformat() if r.created_at else None
+                } for r in records
+            ]
+        finally:
+            if self._db is None:
+                db.close()
+
+

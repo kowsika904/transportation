@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import LoginPage from './components/LoginPage';
+import DeliveryDashboard from './components/DeliveryDashboard';
+import TransportDashboard from './components/TransportDashboard';
 import DisruptionControl from './components/DisruptionControl';
 import LogisticsMap from './components/LogisticsMap';
 import ImpactChain from './components/ImpactChain';
@@ -27,6 +29,11 @@ export default function App() {
     return user ? user.username : null;
   });
 
+  const [currentRole, setCurrentRole] = useState(() => {
+    const user = getStoredUser();
+    return user ? user.role : 'logistics_operator';
+  });
+
   const [dbStatus, setDbStatus] = useState(null);
   const [scenarios, setScenarios] = useState([]);
   const [statusState, setStatusState] = useState('MONITORING'); // MONITORING, DISRUPTION_DETECTED, ANALYZED, ACCEPTED
@@ -39,12 +46,40 @@ export default function App() {
   const [actionLoading, setActionLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
 
-  // Initialize data on mount if authenticated
+  // Initialize data on mount and set up polling interval for Transport Agent incident broadcasts
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && currentRole === 'logistics_operator') {
       loadInitialData();
+      const interval = setInterval(() => {
+        pollActiveIncident();
+      }, 4000);
+      return () => clearInterval(interval);
     }
-  }, [currentUser]);
+  }, [currentUser, currentRole]);
+
+  const pollActiveIncident = async () => {
+    try {
+      const activeInc = await fetchActiveIncident();
+      if (activeInc && activeInc.status === 'ACTIVE' && activeInc.disruption_input) {
+        setCurrentAnalysis({
+          disruption_input: activeInc.disruption_input,
+          classification: activeInc.classification,
+          impact_analysis: activeInc.impact_analysis,
+          priority_rankings: activeInc.impact_analysis?.affected_deliveries || [],
+          recovery_plans: activeInc.all_recovery_plans || {},
+          explainability: {
+            llm_executive_summary: activeInc.llm_executive_summary,
+            llm_team_notification: activeInc.llm_team_notification,
+            llm_provider_info: activeInc.llm_provider_info
+          },
+          timestamp: activeInc.updated_at
+        });
+        setStatusState(activeInc.applied_plan_id ? 'ACCEPTED' : 'ANALYZED');
+      }
+    } catch (err) {
+      console.warn('Polling active incident notice:', err);
+    }
+  };
 
   const loadInitialData = async () => {
     setLoading(true);
@@ -59,13 +94,8 @@ export default function App() {
       if (dbData) setDbStatus(dbData);
       if (scenarioData && scenarioData.scenarios) setScenarios(scenarioData.scenarios);
 
-      // Auto-trigger default analysis for seamless hackathon demo on launch
-      if (scenarioData && scenarioData.scenarios && scenarioData.scenarios.length > 0) {
-        const defaultDisruption = scenarioData.scenarios[0].details;
-        const analysis = await analyzeDisruption(defaultDisruption);
-        setCurrentAnalysis(analysis);
-        setStatusState('ANALYZED');
-      }
+      // Fetch active incident reported by Transport Agent (no hardcoded auto-analysis on launch)
+      await pollActiveIncident();
     } catch (err) {
       console.error('Initialization error:', err);
       setErrorMsg(`Backend Connection Notice: ${err.message}. Ensure FastAPI server is running on http://127.0.0.1:8000.`);
@@ -74,13 +104,20 @@ export default function App() {
     }
   };
 
-  const handleLoginSuccess = (username) => {
-    setCurrentUser(username);
+  const handleLoginSuccess = (userData) => {
+    if (typeof userData === 'object' && userData !== null) {
+      setCurrentUser(userData.username);
+      setCurrentRole(userData.role || 'logistics_operator');
+    } else {
+      setCurrentUser(userData);
+      setCurrentRole('logistics_operator');
+    }
   };
 
   const handleLogout = () => {
     logoutUser();
     setCurrentUser(null);
+    setCurrentRole('logistics_operator');
     setCurrentAnalysis(null);
     setDbStatus(null);
   };
@@ -143,6 +180,15 @@ export default function App() {
     return <LoginPage onLoginSuccess={handleLoginSuccess} />;
   }
 
+  // Role-based routing
+  if (currentRole === 'delivery_team') {
+    return <DeliveryDashboard currentUser={currentUser} onLogout={handleLogout} />;
+  }
+
+  if (currentRole === 'transport_team') {
+    return <TransportDashboard currentUser={currentUser} onLogout={handleLogout} />;
+  }
+
   const selectedPlanObj = currentAnalysis?.recovery_plans ? currentAnalysis.recovery_plans[selectedPlanId] : null;
 
   return (
@@ -153,6 +199,7 @@ export default function App() {
         onRefresh={loadInitialData}
         loading={loading}
         currentUser={currentUser}
+        userRole={currentRole}
         onLogout={handleLogout}
       />
 
